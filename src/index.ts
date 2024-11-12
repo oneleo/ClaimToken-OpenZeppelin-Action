@@ -12,8 +12,8 @@ export const sharedState: Record<"ClaimedEvent", ClaimedEventParams[]> = {
 };
 
 // Constants for percentage and target decimals
-const bufferAmountPercentage = 20n;
-const alarmAmountPercentage = 10n;
+// const bufferAmountPercentage = 30n;
+const alarmAmountPercentage = [20n, 15n, 10n, 5n];
 const storageTotalAmountTargetDecimals = 6;
 
 // Identifier for Claimed event
@@ -335,7 +335,7 @@ const notifySlack = async (
   const payload = {
     username: "webhookbot",
     text: slackText,
-    icon_emoji: ":money:",
+    icon_emoji: ":moneybag:",
   };
 
   console.log(`Sending to Slack: ${slackText}`);
@@ -374,7 +374,7 @@ export async function handler(actionEvent: ActionEvent) {
     console.error("Logs are not found in the transaction.");
     return;
   }
-  //   printJson("actionEvent", actionEvent);
+  printJson("actionEvent", actionEvent);
 
   const requestBody = actionEvent.request.body as BlockTriggerEvent;
   //   printJson("requestBody", requestBody);
@@ -491,15 +491,29 @@ export async function handler(actionEvent: ActionEvent) {
     console.log(`decimals:\t${tokenOfClaimTokenContract.decimals}`);
     console.log(`balance:\t${tokenOfClaimTokenContract.balance}`);
 
-    const alarmAmount =
+    // const alarmAmount =
+    //   (BigInt(
+    //     Math.floor(totalAmount * 10 ** storageTotalAmountTargetDecimals)
+    //   ) *
+    //     bufferAmountPercentage *
+    //     alarmAmountPercentage *
+    //     10n ** BigInt(tokenOfClaimTokenContract.decimals)) /
+    //   10n ** BigInt(storageTotalAmountTargetDecimals) /
+    //   10n ** 4n;
+
+    const baseAlarmAmount =
       (BigInt(
         Math.floor(totalAmount * 10 ** storageTotalAmountTargetDecimals)
       ) *
-        bufferAmountPercentage *
-        alarmAmountPercentage *
         10n ** BigInt(tokenOfClaimTokenContract.decimals)) /
-      10n ** BigInt(storageTotalAmountTargetDecimals) /
-      10n ** 4n;
+      10n ** BigInt(storageTotalAmountTargetDecimals);
+
+    const alarmAmount: bigint[] = [];
+
+    for (const percentage of alarmAmountPercentage) {
+      const amount = (baseAlarmAmount * percentage) / 10n ** 2n;
+      alarmAmount.push(amount);
+    }
 
     console.log(`alarmAmount:\t${alarmAmount}`);
 
@@ -508,27 +522,40 @@ export async function handler(actionEvent: ActionEvent) {
       tokenOfClaimTokenContract.decimals
     );
 
-    const formattedAlarmAmount = formatTokenBalance(
-      alarmAmount,
-      tokenOfClaimTokenContract.decimals
-    );
+    for (const alarm of alarmAmount) {
+      const formattedAlarmAmount = formatTokenBalance(
+        alarm,
+        tokenOfClaimTokenContract.decimals
+      );
 
-    if (alarmAmount >= tokenOfClaimTokenContract.balance.toBigInt()) {
-      const text = `(OpenZeppelin Defender Actions) ClaimToken contract's ${tokenSymbol} (${tokenAddressScanUrl} ) balance (${formattedBalance}) on ${networkName} fell below threshold (${formattedAlarmAmount}), triggered by Claimed event in tx: ${transactionScanUrl} .`;
+      if (
+        tokenOfClaimTokenContract.balance.toBigInt() <= alarm &&
+        tokenOfClaimTokenContract.balance.toBigInt() +
+          claimedLog.amount.toBigInt() >
+          alarm
+      ) {
+        //   const text = `(OpenZeppelin Defender Actions) ClaimToken contract's ${tokenSymbol} (${tokenAddressScanUrl} ) balance (${formattedBalance}) on ${networkName} fell below threshold (${formattedAlarmAmount}), triggered by Claimed event in tx: ${transactionScanUrl} .`;
 
-      console.warn(`text: ${text}`);
+        const text = `(OpenZeppelin) ClaimToken's ${tokenSymbol} balance (${formattedBalance}) on ${networkName} is fell below threshold (${formattedAlarmAmount})!`;
 
-      // Notify Discord
-      await notifyDiscord(text, jsonStringify(claimedLog), discordWebhookLink);
+        console.warn(`text: ${text}`);
 
-      // Notify Slack
-      await notifySlack(text, jsonStringify(claimedLog), slackWebhookLink);
-      return;
+        // Notify Discord
+        await notifyDiscord(
+          text,
+          jsonStringify(claimedLog),
+          discordWebhookLink
+        );
+
+        // Notify Slack
+        await notifySlack(text, "", slackWebhookLink);
+        return;
+      }
+      console.log(
+        `ClaimToken contract's ${tokenSymbol} (${tokenAddressScanUrl} ) balance (${formattedBalance}) on ${networkName}. Note: threshold is (${formattedAlarmAmount}).`
+      );
     }
-    console.log(
-      `ClaimToken contract's ${tokenSymbol} (${tokenAddressScanUrl} ) balance (${formattedBalance}) on ${networkName} exceeds threshold (${formattedAlarmAmount}), so it's sufficient.`
-    );
   }
 
-  console.log(`Tenderly Web3 Action script completed`);
+  console.log(`OpenZeppelin Defender Actions script completed`);
 }
