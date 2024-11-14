@@ -531,7 +531,7 @@ export async function handler(actionEvent: ActionEvent) {
       if (
         tokenOfClaimTokenContract.balance.toBigInt() <= alarm &&
         tokenOfClaimTokenContract.balance.toBigInt() +
-          claimedLog.amount.toBigInt() >
+          claimedLog.amount.toBigInt() >=
           alarm
       ) {
         //   const text = `(OpenZeppelin Defender Actions) ClaimToken contract's ${tokenSymbol} (${tokenAddressScanUrl} ) balance (${formattedBalance}) on ${networkName} fell below threshold (${formattedAlarmAmount}), triggered by Claimed event in tx: ${transactionScanUrl} .`;
